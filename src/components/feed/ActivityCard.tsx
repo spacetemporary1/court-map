@@ -11,9 +11,22 @@ interface ActivityCardProps {
 }
 
 const activityLabels = {
-  checkin: 'checked in',
-  match: 'played a match',
+  checkin:  'checked in at',
+  match:    'played a match at',
+  practice: 'practiced at',
+}
+
+const activityLabelNoVenue = {
+  checkin:  'checked in',
+  match:    'played a match',
   practice: 'practiced',
+}
+
+const SURFACE_ACCENT: Record<string, string> = {
+  hard:   '#C9E832',
+  clay:   '#E07B3A',
+  grass:  '#3CB34A',
+  carpet: '#7B5EA7',
 }
 
 function timeAgo(dateStr: string) {
@@ -52,62 +65,80 @@ export function ActivityCard({ activity, currentUserId }: ActivityCardProps) {
   }
 
   const profile = activity.profile
-  const court = activity.court
+  const court   = activity.court
+  const accent  = SURFACE_ACCENT[court?.surface ?? ''] ?? '#E2E8F0'
 
   return (
-    <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5 hover:shadow-md transition-shadow">
-      <div className="flex items-start gap-3">
-        <div className="w-10 h-10 rounded-full bg-green-100 flex items-center justify-center shrink-0 overflow-hidden">
-          {profile?.avatar_url ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img src={profile.avatar_url} alt={profile.username} className="w-full h-full object-cover" />
-          ) : (
-            <User size={20} className="text-green-600" />
-          )}
-        </div>
-
-        <div className="flex-1 min-w-0">
-          <div className="flex items-baseline justify-between gap-2 flex-wrap">
-            <p className="text-sm font-semibold text-gray-900">
-              {profile?.full_name || profile?.username || 'Unknown'}
-              <span className="font-normal text-gray-500 ml-1">
-                {activityLabels[activity.activity_type]}
-              </span>
-            </p>
-            <span className="text-xs text-gray-400 shrink-0">{timeAgo(activity.played_at)}</span>
+    <div
+      className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden hover:shadow-md transition-shadow"
+      style={{ borderLeft: `4px solid ${accent}` }}
+    >
+      <div className="p-4">
+        {/* Header row */}
+        <div className="flex items-center gap-3">
+          <div className="w-9 h-9 rounded-full bg-green-100 flex items-center justify-center shrink-0 overflow-hidden">
+            {profile?.avatar_url ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={profile.avatar_url} alt={profile.username} className="w-full h-full object-cover" />
+            ) : (
+              <User size={18} className="text-green-600" />
+            )}
           </div>
 
-          {court && (
-            <div className="flex items-center gap-1.5 mt-1 text-xs text-gray-500">
-              <MapPin size={12} />
-              <span className="truncate">{court.name}</span>
+          <div className="flex-1 min-w-0">
+            <div className="flex items-baseline justify-between gap-2">
+              <p className="text-sm font-semibold text-gray-900 truncate">
+                {profile?.full_name || profile?.username || 'Unknown'}
+              </p>
+              <span className="text-xs text-gray-400 shrink-0">{timeAgo(activity.played_at)}</span>
             </div>
-          )}
-
-          {activity.score && (
-            <div className="flex items-center gap-1.5 mt-2 px-3 py-1.5 bg-yellow-50 rounded-lg w-fit">
-              <Trophy size={13} className="text-yellow-600" />
-              <span className="text-sm font-semibold text-yellow-800">{activity.score}</span>
-              {activity.opponent_name && (
-                <span className="text-xs text-yellow-600">vs {activity.opponent_name}</span>
-              )}
-            </div>
-          )}
-
-          {activity.description && (
-            <p className="mt-2 text-sm text-gray-600">{activity.description}</p>
-          )}
-
-          <button
-            onClick={toggleLike}
-            className={`flex items-center gap-1.5 mt-3 text-xs font-medium transition-colors ${
-              liked ? 'text-red-500' : 'text-gray-400 hover:text-red-400'
-            }`}
-          >
-            <Heart size={14} fill={liked ? 'currentColor' : 'none'} />
-            <span>{likeCount > 0 ? likeCount : ''} {likeCount === 1 ? 'like' : likeCount > 1 ? 'likes' : 'Like'}</span>
-          </button>
+            <p className="text-xs text-gray-500 mt-0.5">
+              {court
+                ? <><span>{activityLabels[activity.activity_type]}</span> <span className="font-medium text-gray-700">{court.name}</span></>
+                : activityLabelNoVenue[activity.activity_type]
+              }
+            </p>
+          </div>
         </div>
+
+        {/* Score pill */}
+        {activity.score && (
+          <div className="mt-3 flex items-center gap-2 bg-amber-50 border border-amber-100 rounded-xl px-3 py-2 w-fit">
+            <Trophy size={13} className="text-amber-500 shrink-0" />
+            <span className="text-sm font-bold text-amber-800">{activity.score}</span>
+            {activity.opponent_name && (
+              <span className="text-xs text-amber-600">vs {activity.opponent_name}</span>
+            )}
+          </div>
+        )}
+
+        {/* Description */}
+        {activity.description && (
+          <p className="mt-2 text-sm text-gray-600 leading-relaxed">{activity.description}</p>
+        )}
+
+        {/* Location chip (fallback if not in the header line) */}
+        {!court && activity.court_id && (
+          <div className="flex items-center gap-1 mt-2 text-xs text-gray-400">
+            <MapPin size={11} />
+            <span>Unknown court</span>
+          </div>
+        )}
+
+        {/* Like button */}
+        <button
+          onClick={toggleLike}
+          className={`flex items-center gap-1.5 mt-3 text-xs font-medium transition-colors ${
+            liked ? 'text-red-500' : 'text-gray-400 hover:text-red-400'
+          }`}
+        >
+          <Heart size={13} fill={liked ? 'currentColor' : 'none'} />
+          <span>
+            {likeCount > 0
+              ? `${likeCount} ${likeCount === 1 ? 'like' : 'likes'}`
+              : 'Like'}
+          </span>
+        </button>
       </div>
     </div>
   )

@@ -51,3 +51,10 @@ export interface Follow {
   following_id: string
   created_at: string
 }
+
+export interface Bookmark {
+  user_id: string
+  court_id: string
+  created_at: string
+  court?: Court
+}

@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useCallback } from 'react'
-import { Plus, Rss } from 'lucide-react'
+import { Plus, Rss, Users } from 'lucide-react'
 import type { Activity } from '@/types'
 import { ActivityCard } from './ActivityCard'
 import { NewActivityModal } from './NewActivityModal'
@@ -10,11 +10,13 @@ import { createClient } from '@/lib/supabase/client'
 interface FeedClientProps {
   initialActivities: Activity[]
   userId: string
+  feedUserIds: string[]
+  followingCount: number
 }
 
-export function FeedClient({ initialActivities, userId }: FeedClientProps) {
+export function FeedClient({ initialActivities, userId, feedUserIds, followingCount }: FeedClientProps) {
   const [activities, setActivities] = useState<Activity[]>(initialActivities)
-  const [showModal, setShowModal] = useState(false)
+  const [showModal, setShowModal]   = useState(false)
 
   const refreshFeed = useCallback(async () => {
     const supabase = createClient()
@@ -25,8 +27,9 @@ export function FeedClient({ initialActivities, userId }: FeedClientProps) {
         profile:profiles(*),
         court:courts(*),
         likes_count:activity_likes(count),
-        user_has_liked:activity_likes!inner(user_id)
+        user_has_liked:activity_likes(user_id)
       `)
+      .in('user_id', feedUserIds)
       .order('played_at', { ascending: false })
       .limit(50)
 
@@ -41,7 +44,32 @@ export function FeedClient({ initialActivities, userId }: FeedClientProps) {
         }))
       )
     }
-  }, [userId])
+  }, [feedUserIds, userId])
+
+  function EmptyState() {
+    if (followingCount === 0) {
+      return (
+        <div className="text-center py-20 text-gray-400">
+          <div className="text-5xl mb-4">🎾</div>
+          <p className="font-semibold text-gray-600 mb-1">Your feed is empty</p>
+          <p className="text-sm mb-4">
+            Follow other players to see their matches and check-ins here.
+          </p>
+          <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-green-50 text-green-700 text-sm font-medium">
+            <Users size={15} />
+            Visit someone's profile to follow them
+          </div>
+        </div>
+      )
+    }
+    return (
+      <div className="text-center py-20 text-gray-400">
+        <div className="text-5xl mb-3">🎾</div>
+        <p className="font-medium">No recent activity</p>
+        <p className="text-sm mt-1">Log a match or check in to a court to get started!</p>
+      </div>
+    )
+  }
 
   return (
     <div className="h-full overflow-y-auto">
@@ -50,6 +78,11 @@ export function FeedClient({ initialActivities, userId }: FeedClientProps) {
           <div className="flex items-center gap-2">
             <Rss size={20} className="text-green-600" />
             <h1 className="text-xl font-bold text-gray-900">Activity Feed</h1>
+            {followingCount > 0 && (
+              <span className="text-xs text-gray-400">
+                (you + {followingCount} following)
+              </span>
+            )}
           </div>
           <button
             onClick={() => setShowModal(true)}
@@ -61,11 +94,7 @@ export function FeedClient({ initialActivities, userId }: FeedClientProps) {
         </div>
 
         {activities.length === 0 ? (
-          <div className="text-center py-20 text-gray-400">
-            <div className="text-5xl mb-3">🎾</div>
-            <p className="font-medium">No activities yet</p>
-            <p className="text-sm mt-1">Be the first to log a match or check in to a court!</p>
-          </div>
+          <EmptyState />
         ) : (
           <div className="flex flex-col gap-4">
             {activities.map((activity) => (

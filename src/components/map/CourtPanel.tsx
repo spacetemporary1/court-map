@@ -1,7 +1,7 @@
 'use client'
 
-import { useState } from 'react'
-import { MapPin, Users, Check, X, Wifi, WifiOff } from 'lucide-react'
+import { useState, useEffect } from 'react'
+import { MapPin, Users, Check, X, Wifi, WifiOff, Bookmark } from 'lucide-react'
 import type { Court } from '@/types'
 import { createClient } from '@/lib/supabase/client'
 import { Button } from '@/components/ui/Button'
@@ -23,6 +23,19 @@ const surfaceLabels: Record<string, string> = {
 export function CourtPanel({ court, userId, onClose, onUpdate }: CourtPanelProps) {
   const [loading, setLoading] = useState(false)
   const [checked, setChecked] = useState(false)
+  const [bookmarked, setBookmarked] = useState(false)
+  const [bookmarkLoading, setBookmarkLoading] = useState(false)
+
+  useEffect(() => {
+    const supabase = createClient()
+    supabase
+      .from('court_bookmarks')
+      .select('court_id')
+      .eq('user_id', userId)
+      .eq('court_id', court.id)
+      .maybeSingle()
+      .then(({ data }) => setBookmarked(!!data))
+  }, [userId, court.id])
 
   async function handleCheckIn() {
     setLoading(true)
@@ -34,7 +47,6 @@ export function CourtPanel({ court, userId, onClose, onUpdate }: CourtPanelProps
     })
 
     if (!error) {
-      // Also create an activity entry
       await supabase.from('activities').insert({
         user_id: userId,
         court_id: court.id,
@@ -46,6 +58,25 @@ export function CourtPanel({ court, userId, onClose, onUpdate }: CourtPanelProps
     }
 
     setLoading(false)
+  }
+
+  async function toggleBookmark() {
+    setBookmarkLoading(true)
+    const supabase = createClient()
+    if (bookmarked) {
+      await supabase
+        .from('court_bookmarks')
+        .delete()
+        .eq('user_id', userId)
+        .eq('court_id', court.id)
+      setBookmarked(false)
+    } else {
+      await supabase
+        .from('court_bookmarks')
+        .insert({ user_id: userId, court_id: court.id })
+      setBookmarked(true)
+    }
+    setBookmarkLoading(false)
   }
 
   return (
@@ -88,16 +119,31 @@ export function CourtPanel({ court, userId, onClose, onUpdate }: CourtPanelProps
         </span>
       </div>
 
-      {checked ? (
-        <div className="flex items-center gap-2 text-green-700 bg-green-50 rounded-lg px-3 py-2">
-          <Check size={16} />
-          <span className="font-medium">Checked in!</span>
-        </div>
-      ) : (
-        <Button onClick={handleCheckIn} loading={loading} className="w-full">
-          Check in here
-        </Button>
-      )}
+      <div className="flex gap-2">
+        {checked ? (
+          <div className="flex items-center gap-2 text-green-700 bg-green-50 rounded-lg px-3 py-2 flex-1">
+            <Check size={16} />
+            <span className="font-medium">Checked in!</span>
+          </div>
+        ) : (
+          <Button onClick={handleCheckIn} loading={loading} className="flex-1">
+            Check in here
+          </Button>
+        )}
+
+        <button
+          onClick={toggleBookmark}
+          disabled={bookmarkLoading}
+          title={bookmarked ? 'Remove from want-to-play list' : 'Add to want-to-play list'}
+          className={`flex items-center justify-center w-10 h-10 rounded-lg border transition-colors ${
+            bookmarked
+              ? 'bg-amber-50 border-amber-200 text-amber-600 hover:bg-amber-100'
+              : 'bg-white border-gray-200 text-gray-400 hover:border-gray-300 hover:text-gray-600'
+          }`}
+        >
+          <Bookmark size={16} fill={bookmarked ? 'currentColor' : 'none'} />
+        </button>
+      </div>
     </div>
   )
 }

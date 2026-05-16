@@ -7,6 +7,15 @@ export default async function FeedPage() {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
 
+  // Build feed from self + followed users
+  const { data: follows } = await supabase
+    .from('follows')
+    .select('following_id')
+    .eq('follower_id', user!.id)
+
+  const followingIds = (follows ?? []).map((f: { following_id: string }) => f.following_id)
+  const feedUserIds  = [user!.id, ...followingIds]
+
   const { data: activities } = await supabase
     .from('activities')
     .select(`
@@ -14,12 +23,12 @@ export default async function FeedPage() {
       profile:profiles(*),
       court:courts(*),
       likes_count:activity_likes(count),
-      user_has_liked:activity_likes!inner(user_id)
+      user_has_liked:activity_likes(user_id)
     `)
+    .in('user_id', feedUserIds)
     .order('played_at', { ascending: false })
     .limit(50)
 
-  // Normalize the aggregates Supabase returns
   const normalized = (activities ?? []).map((a) => ({
     ...a,
     likes_count: (a.likes_count as unknown as { count: number }[])[0]?.count ?? 0,
@@ -28,5 +37,12 @@ export default async function FeedPage() {
       : false,
   }))
 
-  return <FeedClient initialActivities={normalized} userId={user!.id} />
+  return (
+    <FeedClient
+      initialActivities={normalized}
+      userId={user!.id}
+      feedUserIds={feedUserIds}
+      followingCount={followingIds.length}
+    />
+  )
 }
