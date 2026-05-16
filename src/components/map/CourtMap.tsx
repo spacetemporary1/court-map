@@ -168,6 +168,7 @@ export function CourtMap({ courts, userId, onCourtsUpdate }: CourtMapProps) {
               onClose={() => setSelectedCourt(null)}
               closeButton={false}
               offset={48}
+              maxWidth="none"
               className="court-popup"
             >
               <CourtPanel
