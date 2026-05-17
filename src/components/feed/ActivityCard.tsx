@@ -140,6 +140,18 @@ export function ActivityCard({ activity, currentUserId }: ActivityCardProps) {
           </span>
         </button>
       </div>
+
+      {/* Activity photo */}
+      {activity.image_url && (
+        <div className="border-t border-gray-50">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={activity.image_url}
+            alt="Activity photo"
+            className="w-full max-h-80 object-cover"
+          />
+        </div>
+      )}
     </div>
   )
 }

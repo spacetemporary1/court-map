@@ -27,7 +27,7 @@ export async function proxy(request: NextRequest) {
 
   const { pathname } = request.nextUrl
 
-  const authRoutes = ['/login', '/signup']
+  const authRoutes = ['/login', '/signup', '/forgot-password']
   const protectedRoutes = ['/map', '/feed', '/profile']
 
   if (!user && protectedRoutes.some((r) => pathname.startsWith(r))) {

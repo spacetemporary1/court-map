@@ -4,6 +4,8 @@ export interface Profile {
   full_name: string | null
   avatar_url: string | null
   bio: string | null
+  location: string | null
+  favorite_players: string[]
   created_at: string
 }
 
@@ -38,6 +40,7 @@ export interface Activity {
   description: string | null
   score: string | null
   opponent_name: string | null
+  image_url: string | null
   played_at: string
   created_at: string
   court?: Court

@@ -1,8 +1,9 @@
 import { notFound } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
-import { MapPin, Trophy, User, Bookmark } from 'lucide-react'
+import { MapPin, Trophy, User, Bookmark, Star, Pencil } from 'lucide-react'
 import type { Court } from '@/types'
 import { FollowButton } from '@/components/profile/FollowButton'
+import { ProfileClient } from '@/components/profile/ProfileClient'
 
 interface PageProps {
   params: Promise<{ username: string }>
@@ -13,6 +14,10 @@ const SURFACE_ACCENT: Record<string, string> = {
   clay:   '#E07B3A',
   grass:  '#3CB34A',
   carpet: '#7B5EA7',
+}
+
+const SURFACE_LABEL: Record<string, string> = {
+  hard: 'Hard', clay: 'Clay', grass: 'Grass', carpet: 'Carpet',
 }
 
 function activityLabel(type: string) {
@@ -36,7 +41,6 @@ export default async function ProfilePage({ params }: PageProps) {
 
   const isOwnProfile = currentUser?.id === profile.id
 
-  // Parallel data fetches
   const [
     { data: activities },
     { data: checkInsData },
@@ -52,13 +56,11 @@ export default async function ProfilePage({ params }: PageProps) {
       .order('played_at', { ascending: false })
       .limit(20),
 
-    // All check-ins to compute top courts
     supabase
       .from('check_ins')
       .select('court_id, court:courts(id, name, surface, address)')
       .eq('user_id', profile.id),
 
-    // Top 3 bookmarks
     supabase
       .from('court_bookmarks')
       .select('court:courts(id, name, surface, address)')
@@ -76,7 +78,6 @@ export default async function ProfilePage({ params }: PageProps) {
       .select('*', { count: 'exact', head: true })
       .eq('follower_id', profile.id),
 
-    // Is current user following this profile?
     currentUser && !isOwnProfile
       ? supabase
           .from('follows')
@@ -87,7 +88,7 @@ export default async function ProfilePage({ params }: PageProps) {
       : Promise.resolve({ data: null }),
   ])
 
-  // Compute top 3 courts by check-in count
+  // Compute unique courts visited with visit count
   const courtVisitMap = new Map<string, { court: Court; count: number }>()
   for (const ci of checkInsData ?? []) {
     const court = ci.court as unknown as Court | null
@@ -96,16 +97,17 @@ export default async function ProfilePage({ params }: PageProps) {
     if (existing) existing.count++
     else courtVisitMap.set(court.id, { court, count: 1 })
   }
-  const topCourts = [...courtVisitMap.values()]
-    .sort((a, b) => b.count - a.count)
-    .slice(0, 3)
+  const visitedCourts = [...courtVisitMap.values()].sort((a, b) => b.count - a.count)
+  const topCourts     = visitedCourts.slice(0, 3)
 
   const bookmarkedCourts = (bookmarksData ?? [])
     .map((b) => b.court as unknown as Court | null)
     .filter(Boolean) as Court[]
 
-  const matchCount = (activities ?? []).filter((a) => a.activity_type === 'match').length
-  const isFollowing = !!followRow
+  const matchCount   = (activities ?? []).filter((a) => a.activity_type === 'match').length
+  const isFollowing  = !!followRow
+  const favPlayers   = (profile.favorite_players as string[] | null) ?? []
+  const location     = (profile.location as string | null) ?? ''
 
   return (
     <div className="h-full overflow-y-auto bg-gray-50">
@@ -128,19 +130,37 @@ export default async function ProfilePage({ params }: PageProps) {
                   {profile.full_name || profile.username}
                 </h1>
                 <p className="text-gray-400 text-sm">@{profile.username}</p>
+                {location && (
+                  <p className="text-gray-500 text-xs mt-0.5 flex items-center gap-1">
+                    <MapPin size={11} /> {location}
+                  </p>
+                )}
                 {profile.bio && (
                   <p className="text-gray-600 text-sm mt-1 leading-snug">{profile.bio}</p>
                 )}
               </div>
             </div>
 
-            {!isOwnProfile && currentUser && (
-              <FollowButton
-                currentUserId={currentUser.id}
-                targetUserId={profile.id}
-                initialIsFollowing={isFollowing}
-              />
-            )}
+            <div className="flex items-center gap-2 shrink-0">
+              {isOwnProfile && (
+                <ProfileClient
+                  userId={profile.id}
+                  initialLocation={location}
+                  initialPlayers={favPlayers}
+                >
+                  <button className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium bg-gray-100 text-gray-700 hover:bg-gray-200 transition-colors">
+                    <Pencil size={13} /> Edit
+                  </button>
+                </ProfileClient>
+              )}
+              {!isOwnProfile && currentUser && (
+                <FollowButton
+                  currentUserId={currentUser.id}
+                  targetUserId={profile.id}
+                  initialIsFollowing={isFollowing}
+                />
+              )}
+            </div>
           </div>
 
           {/* Stats row */}
@@ -168,31 +188,66 @@ export default async function ProfilePage({ params }: PageProps) {
           </div>
         </div>
 
-        {/* ── Top favourite courts ──────────────────────────────────── */}
-        {topCourts.length > 0 && (
+        {/* ── Collect-em-all courts ─────────────────────────────────── */}
+        {visitedCourts.length > 0 && (
           <section>
             <h2 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2 px-1">
-              Favourite courts
+              Courts visited · {visitedCourts.length}
             </h2>
-            <div className="bg-white rounded-2xl border border-gray-100 shadow-sm divide-y divide-gray-50">
-              {topCourts.map(({ court, count }, i) => (
-                <div
-                  key={court.id}
-                  className="flex items-center gap-3 px-4 py-3"
-                  style={{ borderLeft: `3px solid ${SURFACE_ACCENT[court.surface ?? ''] ?? '#E2E8F0'}` }}
-                >
-                  <span className="text-xs font-bold text-gray-300 w-4">#{i + 1}</span>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium text-gray-900 truncate">{court.name}</p>
-                    {court.address && (
-                      <p className="text-xs text-gray-400 truncate mt-0.5">{court.address.split(',').slice(0, 2).join(',')}</p>
-                    )}
+            <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4">
+              <div className="flex flex-wrap gap-2">
+                {visitedCourts.slice(0, 20).map(({ court, count }) => {
+                  const accent = SURFACE_ACCENT[court.surface ?? ''] ?? '#94A3B8'
+                  return (
+                    <div
+                      key={court.id}
+                      title={`${court.name}${count > 1 ? ` · ${count} visits` : ''}`}
+                      className="group relative"
+                    >
+                      <div
+                        className="w-10 h-10 rounded-full flex items-center justify-center text-base shadow-sm ring-2 ring-white cursor-default select-none"
+                        style={{ backgroundColor: accent }}
+                      >
+                        🎾
+                      </div>
+                      {count > 1 && (
+                        <span className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-gray-900 text-white text-[9px] font-bold flex items-center justify-center leading-none">
+                          {count > 9 ? '9+' : count}
+                        </span>
+                      )}
+                    </div>
+                  )
+                })}
+                {visitedCourts.length > 20 && (
+                  <div className="w-10 h-10 rounded-full bg-gray-100 flex items-center justify-center text-xs font-semibold text-gray-500 ring-2 ring-white">
+                    +{visitedCourts.length - 20}
                   </div>
-                  <span className="text-xs font-semibold text-green-600 bg-green-50 px-2 py-0.5 rounded-full shrink-0">
-                    {count}×
-                  </span>
+                )}
+              </div>
+
+              {/* Top 3 detail rows */}
+              {topCourts.length > 0 && (
+                <div className="mt-4 pt-3 border-t border-gray-50 space-y-2">
+                  {topCourts.map(({ court, count }, i) => (
+                    <div key={court.id} className="flex items-center gap-3">
+                      <span className="text-xs font-bold text-gray-300 w-4 shrink-0">#{i + 1}</span>
+                      <div
+                        className="w-2 h-2 rounded-full shrink-0"
+                        style={{ backgroundColor: SURFACE_ACCENT[court.surface ?? ''] ?? '#94A3B8' }}
+                      />
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium text-gray-800 truncate">{court.name}</p>
+                        {court.surface && (
+                          <p className="text-xs text-gray-400">{SURFACE_LABEL[court.surface]}</p>
+                        )}
+                      </div>
+                      <span className="text-xs font-semibold text-green-600 bg-green-50 px-2 py-0.5 rounded-full shrink-0">
+                        {count}×
+                      </span>
+                    </div>
+                  ))}
                 </div>
-              ))}
+              )}
             </div>
           </section>
         )}
@@ -214,11 +269,35 @@ export default async function ProfilePage({ params }: PageProps) {
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-medium text-gray-900 truncate">{court.name}</p>
                     {court.address && (
-                      <p className="text-xs text-gray-400 truncate mt-0.5">{court.address.split(',').slice(0, 2).join(',')}</p>
+                      <p className="text-xs text-gray-400 truncate mt-0.5">
+                        {court.address.split(',').slice(0, 2).join(',')}
+                      </p>
                     )}
                   </div>
                 </div>
               ))}
+            </div>
+          </section>
+        )}
+
+        {/* ── Favourite players ─────────────────────────────────────── */}
+        {favPlayers.length > 0 && (
+          <section>
+            <h2 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2 px-1 flex items-center gap-1.5">
+              <Star size={11} /> Favourite players
+            </h2>
+            <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4">
+              <div className="flex flex-wrap gap-2">
+                {favPlayers.map((player) => (
+                  <div
+                    key={player}
+                    className="flex items-center gap-2 px-3 py-2 rounded-full bg-amber-50 border border-amber-100"
+                  >
+                    <Star size={12} className="text-amber-400" fill="currentColor" />
+                    <span className="text-sm font-medium text-amber-800">{player}</span>
+                  </div>
+                ))}
+              </div>
             </div>
           </section>
         )}
@@ -241,31 +320,37 @@ export default async function ProfilePage({ params }: PageProps) {
                 return (
                   <div
                     key={a.id}
-                    className="bg-white rounded-xl border border-gray-100 shadow-sm px-4 py-3"
+                    className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden"
                     style={{ borderLeft: `3px solid ${accent}` }}
                   >
-                    <div className="flex items-center justify-between gap-2">
-                      <span className="text-xs font-semibold text-gray-500 uppercase tracking-wide">
-                        {activityLabel(a.activity_type)}
-                      </span>
-                      <span className="text-xs text-gray-400 shrink-0">
-                        {new Date(a.played_at).toLocaleDateString()}
-                      </span>
+                    <div className="px-4 py-3">
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="text-xs font-semibold text-gray-500 uppercase tracking-wide">
+                          {activityLabel(a.activity_type)}
+                        </span>
+                        <span className="text-xs text-gray-400 shrink-0">
+                          {new Date(a.played_at).toLocaleDateString()}
+                        </span>
+                      </div>
+                      {(a.court as unknown as Court | null) && (
+                        <p className="text-sm font-medium text-gray-800 mt-0.5 flex items-center gap-1">
+                          <MapPin size={11} className="text-gray-400 shrink-0" />
+                          {(a.court as unknown as Court).name}
+                        </p>
+                      )}
+                      {a.score && (
+                        <p className="text-sm font-semibold text-amber-700 mt-1 flex items-center gap-1">
+                          <Trophy size={11} className="text-amber-500 shrink-0" />
+                          {a.score}{a.opponent_name && ` vs ${a.opponent_name}`}
+                        </p>
+                      )}
+                      {a.description && (
+                        <p className="text-sm text-gray-600 mt-1">{a.description}</p>
+                      )}
                     </div>
-                    {(a.court as unknown as Court | null) && (
-                      <p className="text-sm font-medium text-gray-800 mt-0.5 flex items-center gap-1">
-                        <MapPin size={11} className="text-gray-400 shrink-0" />
-                        {(a.court as unknown as Court).name}
-                      </p>
-                    )}
-                    {a.score && (
-                      <p className="text-sm font-semibold text-amber-700 mt-1 flex items-center gap-1">
-                        <Trophy size={11} className="text-amber-500 shrink-0" />
-                        {a.score}{a.opponent_name && ` vs ${a.opponent_name}`}
-                      </p>
-                    )}
-                    {a.description && (
-                      <p className="text-sm text-gray-600 mt-1">{a.description}</p>
+                    {a.image_url && (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img src={a.image_url} alt="Activity photo" className="w-full max-h-60 object-cover" />
                     )}
                   </div>
                 )
